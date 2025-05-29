@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -18,7 +19,8 @@ import {
 
 const { width, height } = Dimensions.get("window");
 
-export default function CreateAccountPage() {
+export default function SignUpPage() {
+  const router = useRouter();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -104,7 +106,7 @@ export default function CreateAccountPage() {
 
   const handleLogin = () => {
     console.log("Navigate to Login");
-    // Navigate to login screen
+    router.push("/screens/LoginPage");
   };
 
   return (

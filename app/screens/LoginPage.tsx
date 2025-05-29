@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -18,6 +19,7 @@ import {
 const { width, height } = Dimensions.get("window");
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +35,7 @@ export default function LoginPage() {
     try {
       // Firebase login logic will go here
       console.log("Login with:", { email, password });
-
+      router.push("/screens/AddNewLead");
       // Placeholder for Firebase authentication
       // const userCredential = await signInWithEmailAndPassword(auth, email, password);
       // Navigation to home screen after successful login
@@ -75,7 +77,7 @@ export default function LoginPage() {
 
   const handleRegister = () => {
     console.log("Navigate to Register");
-    // Navigate to register screen
+    router.push("/screens/SignUpPage");
   };
 
   return (

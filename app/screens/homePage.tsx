@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   Dimensions,
@@ -11,14 +12,15 @@ import {
 
 const { width, height } = Dimensions.get("window");
 export default function LoginPage() {
+  const router = useRouter();
   const handleLogin = () => {
     console.log("Login pressed");
-    // Add your login logic here
+    router.push("/screens/LoginPage");
   };
 
   const handleCreateAccount = () => {
     console.log("Create Account pressed");
-    // Add your create account logic here
+    router.push("/screens/SignUpPage");
   };
 
   return (
