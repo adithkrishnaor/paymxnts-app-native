@@ -20,9 +20,10 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="screens/homePage" />
+        <Stack.Screen name="screens/PendingPage" />
         <Stack.Screen name="screens/SignUpPage" />
-
         <Stack.Screen name="screens/LoginPage" />
+        <Stack.Screen name="screens/AdminVerificationPage" />
         <Stack.Screen name="screens/AddNewLead" />
         <Stack.Screen name="+not-found" />
       </Stack>

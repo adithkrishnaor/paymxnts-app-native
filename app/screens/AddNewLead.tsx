@@ -1,9 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
-import React, { useState } from "react";
+import * as FileSystem from "expo-file-system";
+import * as MailComposer from "expo-mail-composer";
+import { useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -14,16 +19,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { db } from "../../config/FirebaseConfig";
 
-const { width, height } = Dimensions.get("window");
-
-interface AddNewLeadPageProps {
-  userName?: string; // Dynamic user name prop
-}
-
-export default function AddNewLead({
-  userName = "Albert Jordan",
-}: AddNewLeadPageProps) {
+export default function AddNewLead() {
+  const router = useRouter();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -33,6 +32,9 @@ export default function AddNewLead({
   const [creditProcessingVolume, setCreditProcessingVolume] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agentName, setAgentName] = useState("");
+  const [agentEmail, setAgentEmail] = useState("");
+  const [loadingAgent, setLoadingAgent] = useState(true);
 
   const volumeOptions = [
     "Select Volume",
@@ -40,53 +42,479 @@ export default function AddNewLead({
     "Over $25,000/Month",
   ];
 
+  // Configuration - you can move these to a config file
+  const RECIPIENT_EMAIL = "adthkrshna@gmail.com"; // Change this to your desired email
+  const COMPANY_NAME = "Adith Company";
+
+  useEffect(() => {
+    const fetchAgentData = async () => {
+      try {
+        const storedAgentEmail = await AsyncStorage.getItem("agentEmail");
+
+        if (!storedAgentEmail) {
+          router.push("/screens/LoginPage");
+          return;
+        }
+
+        const agentQuery = query(
+          collection(db, "agents"),
+          where("email", "==", storedAgentEmail.toLowerCase())
+        );
+
+        const agentSnapshot = await getDocs(agentQuery);
+
+        if (agentSnapshot.empty) {
+          Alert.alert("Error", "Agent not found");
+          router.push("/screens/LoginPage");
+          return;
+        }
+
+        const agentDoc = agentSnapshot.docs[0];
+        const agentData = agentDoc.data();
+        setAgentName(`${agentData.firstName} ${agentData.lastName}`);
+        setAgentEmail(storedAgentEmail);
+      } catch (error) {
+        console.error("Error fetching agent data:", error);
+        Alert.alert("Error", "Failed to load agent data");
+        router.push("/screens/LoginPage");
+      } finally {
+        setLoadingAgent(false);
+      }
+    };
+
+    fetchAgentData();
+  }, []);
+
+  const generateCSVContent = (leadData: any) => {
+    // CSV headers
+    const headers = [
+      "First Name",
+      "Last Name",
+      "Business Name",
+      "Phone",
+      "Email Address",
+      "Zip Code",
+      "Credit Processing Volume",
+      "Notes",
+      "Agent Name",
+      "Agent Email",
+      "Submission Date",
+      "Submission Time",
+    ];
+
+    // Current date and time
+    const now = new Date();
+    const submissionDate = now.toLocaleDateString();
+    const submissionTime = now.toLocaleTimeString();
+
+    // CSV data row - properly escape all fields
+    const dataRow = [
+      `"${leadData.firstName.replace(/"/g, '""')}"`,
+      `"${leadData.lastName.replace(/"/g, '""')}"`,
+      `"${leadData.businessName.replace(/"/g, '""')}"`,
+      `"${leadData.phone.replace(/"/g, '""')}"`,
+      `"${leadData.emailAddress.replace(/"/g, '""')}"`,
+      `"${leadData.zipCode.replace(/"/g, '""')}"`,
+      `"${leadData.creditProcessingVolume.replace(/"/g, '""')}"`,
+      `"${leadData.notes.replace(/"/g, '""')}"`,
+      `"${agentName.replace(/"/g, '""')}"`,
+      `"${agentEmail.replace(/"/g, '""')}"`,
+      `"${submissionDate}"`,
+      `"${submissionTime}"`,
+    ];
+
+    // Combine headers and data
+    const csvContent = [headers.join(","), dataRow.join(",")].join("\n");
+
+    return csvContent;
+  };
+
+  const generateCSVFileName = () => {
+    const now = new Date();
+    const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, "-"); // HH-MM-SS
+    const cleanFirstName = firstName.replace(/[^a-zA-Z0-9]/g, "");
+    const cleanLastName = lastName.replace(/[^a-zA-Z0-9]/g, "");
+    return `lead_${cleanFirstName}_${cleanLastName}_${dateStr}_${timeStr}.csv`;
+  };
+
+  const sendLeadViaEmail = async (leadData: any) => {
+    try {
+      console.log("Starting email send process...");
+
+      // In Expo Go, MailComposer might not work properly, so we'll use sharing as primary method
+      // and provide email as a sharing option
+
+      // Check if we're in Expo Go environment
+      const isExpoGo = __DEV__ && Platform.OS !== "web";
+
+      if (isExpoGo) {
+        console.log("Detected Expo Go environment, using sharing method");
+        return await sendViaSharing(leadData);
+      }
+
+      // Check if mail composer is available
+      const isMailAvailable = await MailComposer.isAvailableAsync();
+      console.log("Mail available:", isMailAvailable);
+
+      if (!isMailAvailable) {
+        console.log("Mail not available, falling back to sharing");
+        return await sendViaSharing(leadData);
+      }
+
+      // Generate CSV content
+      const csvContent = generateCSVContent(leadData);
+      const fileName = generateCSVFileName();
+
+      // Create temporary file
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      console.log("Creating CSV file at:", fileUri);
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      console.log("CSV file created successfully");
+
+      // Compose email with agent as sender
+      const emailOptions: MailComposer.MailComposerOptions = {
+        recipients: [RECIPIENT_EMAIL],
+        subject: `New Lead Submission - ${leadData.firstName} ${leadData.lastName}`,
+        body: `
+Dear Team,
+
+A new lead has been submitted by ${agentName}.
+
+Lead Details:
+- Name: ${leadData.firstName} ${leadData.lastName}
+- Business: ${leadData.businessName}
+- Phone: ${leadData.phone}
+- Email: ${leadData.emailAddress}
+- Zip Code: ${leadData.zipCode}
+- Processing Volume: ${leadData.creditProcessingVolume}
+- Notes: ${leadData.notes}
+
+Agent: ${agentName} (${agentEmail})
+Submission Date: ${new Date().toLocaleString()}
+
+Please find the detailed information in the attached CSV file.
+
+Best regards,
+${COMPANY_NAME} Lead Management System
+        `,
+        attachments: [fileUri],
+        isHtml: false,
+      };
+
+      console.log("Composing email with options:", {
+        recipients: emailOptions.recipients,
+        subject: emailOptions.subject,
+        hasAttachment: !!emailOptions.attachments?.length,
+      });
+
+      // Send email
+      const result = await MailComposer.composeAsync(emailOptions);
+      console.log("Email composer result:", result);
+
+      // Clean up temporary file
+      try {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+        console.log("Temporary file cleaned up");
+      } catch (cleanupError) {
+        console.warn("Failed to cleanup temporary file:", cleanupError);
+      }
+
+      if (result.status === MailComposer.MailComposerStatus.SENT) {
+        Alert.alert("Success", "Lead submitted and email sent successfully!");
+        return true;
+      } else if (result.status === MailComposer.MailComposerStatus.CANCELLED) {
+        Alert.alert("Cancelled", "Email composition was cancelled");
+        return false;
+      } else if (result.status === MailComposer.MailComposerStatus.SAVED) {
+        Alert.alert("Saved", "Email has been saved to drafts");
+        return true;
+      } else {
+        console.log("Unexpected email result status:", result.status);
+        Alert.alert(
+          "Notice",
+          "Email composer closed. Please check if the email was sent."
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error("Email sending error:", error);
+      console.log("Falling back to sharing method due to error");
+      return await sendViaSharing(leadData);
+    }
+  };
+
+  const sendViaSharing = async (leadData: any) => {
+    try {
+      console.log("Using sharing method for lead submission");
+
+      // Generate email content as text
+      const emailContent = `
+TO: ${RECIPIENT_EMAIL}
+SUBJECT: New Lead Submission - ${leadData.firstName} ${leadData.lastName}
+
+Dear Team,
+
+A new lead has been submitted by ${agentName}.
+
+Lead Details:
+- Name: ${leadData.firstName} ${leadData.lastName}
+- Business: ${leadData.businessName}
+- Phone: ${leadData.phone}
+- Email: ${leadData.emailAddress}
+- Zip Code: ${leadData.zipCode}
+- Processing Volume: ${leadData.creditProcessingVolume}
+- Notes: ${leadData.notes}
+
+Agent: ${agentName} (${agentEmail})
+Submission Date: ${new Date().toLocaleString()}
+
+CSV data is included below:
+${generateCSVContent(leadData)}
+
+Best regards,
+${COMPANY_NAME} Lead Management System
+      `;
+
+      // Create text file with email content
+      const fileName = `lead_${leadData.firstName}_${leadData.lastName}_${
+        new Date().toISOString().split("T")[0]
+      }.txt`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, emailContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      console.log("Lead file created for sharing:", fileUri);
+
+      // Check if sharing is available
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      console.log("Sharing available:", isSharingAvailable);
+
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "text/plain",
+          dialogTitle: "Share Lead Information",
+        });
+
+        Alert.alert(
+          "Lead Prepared",
+          `Lead information has been prepared for sharing. You can email it to ${RECIPIENT_EMAIL} or share via any app.`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                console.log("Lead sharing completed successfully");
+              },
+            },
+          ]
+        );
+
+        return true;
+      } else {
+        // Fallback: Show the content in an alert for copying
+        Alert.alert(
+          "Lead Information",
+          `Please copy this information and send to ${RECIPIENT_EMAIL}:\n\n${emailContent.substring(
+            0,
+            500
+          )}...`,
+          [
+            {
+              text: "OK",
+            },
+          ]
+        );
+        return true;
+      }
+    } catch (error) {
+      console.error("Sharing method error:", error);
+      Alert.alert("Error", "Failed to prepare lead for sharing");
+      return false;
+    }
+  };
+
+  const saveAndShareCSV = async (leadData: any) => {
+    try {
+      console.log("Generating CSV for sharing...");
+
+      const csvContent = generateCSVContent(leadData);
+      const fileName = generateCSVFileName();
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      console.log("CSV file created for sharing:", fileUri);
+
+      // Check if sharing is available
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      console.log("Sharing available:", isSharingAvailable);
+
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "text/csv",
+          dialogTitle: "Share Lead CSV",
+        });
+
+        Alert.alert(
+          "CSV Generated",
+          `Lead data has been saved as ${fileName}. You can share it via your preferred method.`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                console.log("CSV sharing completed successfully");
+              },
+            },
+          ]
+        );
+
+        return true;
+      } else {
+        Alert.alert("Error", "Unable to share the CSV file on this device");
+        return false;
+      }
+    } catch (error) {
+      console.error("CSV generation error:", error);
+      Alert.alert("Error", "Failed to generate CSV file");
+      return false;
+    }
+  };
+
+  const resetForm = () => {
+    console.log("Resetting form...");
+    setFirstName("");
+    setLastName("");
+    setBusinessName("");
+    setPhone("");
+    setEmailAddress("");
+    setZipCode("");
+    setCreditProcessingVolume("");
+    setNotes("");
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem("agentEmail");
+      router.push("/screens/LoginPage");
+    } catch (error) {
+      Alert.alert("Logout Error", "Failed to log out. Please try again.");
+      console.error("Logout error:", error);
+    }
+  };
+
+  const validateForm = () => {
+    if (!firstName.trim()) {
+      Alert.alert("Validation Error", "First Name is required");
+      return false;
+    }
+    if (!lastName.trim()) {
+      Alert.alert("Validation Error", "Last Name is required");
+      return false;
+    }
+    if (!businessName.trim()) {
+      Alert.alert("Validation Error", "Business Name is required");
+      return false;
+    }
+    if (!phone.trim()) {
+      Alert.alert("Validation Error", "Phone number is required");
+      return false;
+    }
+    if (!emailAddress.trim()) {
+      Alert.alert("Validation Error", "Email Address is required");
+      return false;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress.trim())) {
+      Alert.alert("Validation Error", "Please enter a valid email address");
+      return false;
+    }
+
+    // Phone validation (more flexible)
+    const phoneRegex = /^[\d\s\-\+\(\)\.]+$/;
+    if (!phoneRegex.test(phone.trim()) || phone.trim().length < 10) {
+      Alert.alert(
+        "Validation Error",
+        "Please enter a valid phone number (minimum 10 digits)"
+      );
+      return false;
+    }
+
+    if (!creditProcessingVolume || creditProcessingVolume === "") {
+      Alert.alert("Validation Error", "Please select Credit Processing Volume");
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSave = async () => {
-    if (!firstName || !lastName || !businessName || !phone || !emailAddress) {
-      Alert.alert("Error", "Please fill in all required fields");
+    console.log("Save button pressed");
+
+    if (!validateForm()) {
+      return;
+    }
+
+    if (!agentName || !agentEmail) {
+      Alert.alert(
+        "Error",
+        "Agent information not loaded. Please try logging in again."
+      );
       return;
     }
 
     setLoading(true);
+
     try {
-      // API call to save lead data
       const leadData = {
-        firstName,
-        lastName,
-        businessName,
-        phone,
-        emailAddress,
-        zipCode,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        businessName: businessName.trim(),
+        phone: phone.trim(),
+        emailAddress: emailAddress.trim(),
+        zipCode: zipCode.trim(),
         creditProcessingVolume,
-        notes,
+        notes: notes.trim(),
       };
 
       console.log("Saving lead:", leadData);
 
-      // Placeholder for API call
-      // await saveLead(leadData);
+      // Send lead via email as CSV or sharing
+      const leadSent = await sendLeadViaEmail(leadData);
 
-      Alert.alert("Success", "Lead saved successfully!", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Reset form or navigate back
-            setFirstName("");
-            setLastName("");
-            setBusinessName("");
-            setPhone("");
-            setEmailAddress("");
-            setZipCode("");
-            setCreditProcessingVolume("");
-            setNotes("");
-          },
-        },
-      ]);
+      if (leadSent) {
+        // Reset form only if lead was sent/shared successfully
+        resetForm();
+      }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to save lead");
+      console.error("Save error:", error);
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save lead. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
+
+  if (loadingAgent) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContainer}>
+          <Text style={styles.loadingText}>Loading agent information...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -102,10 +530,10 @@ export default function AddNewLead({
           <View style={styles.headerContainer}>
             <View style={styles.welcomeContainer}>
               <Text style={styles.welcomeText}>Welcome Back</Text>
-              <Text style={styles.userName}>{userName}</Text>
+              <Text style={styles.userName}>{agentName || "Agent"}</Text>
             </View>
-            <TouchableOpacity style={styles.profileIcon}>
-              <Ionicons name="person-outline" size={24} color="#666" />
+            <TouchableOpacity style={styles.profileIcon} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={24} color="#666" />
             </TouchableOpacity>
           </View>
 
@@ -115,7 +543,7 @@ export default function AddNewLead({
           {/* Name Row */}
           <View style={styles.nameRow}>
             <View style={styles.nameInputContainer}>
-              <Text style={styles.inputLabel}>First Name</Text>
+              <Text style={styles.inputLabel}>First Name *</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
@@ -130,7 +558,7 @@ export default function AddNewLead({
             </View>
 
             <View style={styles.nameInputContainer}>
-              <Text style={styles.inputLabel}>Last Name</Text>
+              <Text style={styles.inputLabel}>Last Name *</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
@@ -147,7 +575,7 @@ export default function AddNewLead({
 
           {/* Business Name */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Business Name</Text>
+            <Text style={styles.inputLabel}>Business Name *</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.textInput}
@@ -169,7 +597,7 @@ export default function AddNewLead({
 
           {/* Phone */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Phone</Text>
+            <Text style={styles.inputLabel}>Phone *</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.textInput}
@@ -185,7 +613,7 @@ export default function AddNewLead({
 
           {/* Email Address */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email Address</Text>
+            <Text style={styles.inputLabel}>Email Address *</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.textInput}
@@ -224,29 +652,22 @@ export default function AddNewLead({
 
           {/* Credit Processing Volume */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Credit Processing Volume</Text>
+            <Text style={styles.inputLabel}>Credit Processing Volume *</Text>
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={creditProcessingVolume}
                 onValueChange={(itemValue) => {
-                  // Only set the value if it's not the placeholder
                   if (itemValue !== "") {
                     setCreditProcessingVolume(itemValue);
                   }
                 }}
                 style={styles.picker}
-                itemStyle={
-                  creditProcessingVolume === ""
-                    ? styles.pickerPlaceholder
-                    : undefined
-                }
               >
                 {volumeOptions.map((option, index) => (
                   <Picker.Item
                     key={index}
                     label={option}
-                    value={index === 0 ? "" : option} // First item (placeholder) has empty value
-                    // Optional: You can style the placeholder item differently
+                    value={index === 0 ? "" : option}
                     color={
                       index === 0 && creditProcessingVolume === ""
                         ? "#999"
@@ -284,7 +705,7 @@ export default function AddNewLead({
             disabled={loading}
           >
             <Text style={styles.saveButtonText}>
-              {loading ? "Saving..." : "Save"}
+              {loading ? "Submitting..." : "Submit Lead"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -297,6 +718,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
   },
   keyboardView: {
     flex: 1,

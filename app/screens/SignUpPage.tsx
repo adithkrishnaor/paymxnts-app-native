@@ -1,6 +1,8 @@
+import { db } from "@/config/FirebaseConfig";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
+import { addDoc, collection } from "firebase/firestore";
 import React, { useState } from "react";
 import {
   Alert,
@@ -58,13 +60,31 @@ export default function SignUpPage() {
 
     setLoading(true);
     try {
-      // Firebase registration logic will go here
-      console.log("Sign up with:", {
+      // Submit verification request to Firebase
+      const verificationData = {
         firstName,
         lastName,
         email,
         phone: countryCode + phone,
-        password,
+        password, // In production, hash this before storing
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        approvedAt: null,
+        approvedBy: null,
+      };
+
+      // Add to Firebase collection for pending verifications
+      await addDoc(collection(db, "agentVerifications"), verificationData);
+
+      // Navigate to verification pending screen
+      router.push({
+        pathname: "/screens/PendingPage",
+        params: { email },
+      });
+
+      // Firebase registration logic will go here
+      console.log("Sign up with:", {
+        email,
       });
 
       // Placeholder for Firebase authentication

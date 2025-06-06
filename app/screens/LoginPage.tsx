@@ -1,9 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import React, { useState } from "react";
 import {
   Alert,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -15,8 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const { width, height } = Dimensions.get("window");
+import { auth, db } from "../../config/FirebaseConfig";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,23 +41,166 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      // Firebase login logic will go here
-      console.log("Login with:", { email, password });
+      const userEmail = email.toLowerCase();
+
+      // Check if user is admin (use Firebase Auth for admins only)
+      const adminEmails = ["adith3939@gmail.com", "admin@gmail.com"];
+      if (adminEmails.includes(userEmail)) {
+        // Admin login through Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+        router.push("/screens/AdminVerificationPage");
+        return;
+      }
+
+      // Agent login through Firestore validation
+      const agentQuery = query(
+        collection(db, "agents"),
+        where("email", "==", userEmail),
+        where("status", "==", "active")
+      );
+
+      const agentSnapshot = await getDocs(agentQuery);
+
+      if (agentSnapshot.empty) {
+        Alert.alert("Login Error", "No active account found with this email");
+        return;
+      }
+
+      const agentDoc = agentSnapshot.docs[0];
+      const agentData = agentDoc.data();
+
+      // Validate password (in production, use proper password hashing)
+      if (agentData.password !== password) {
+        Alert.alert("Login Error", "Incorrect password");
+        return;
+      }
+
+      // Update last login
+      // await updateDoc(doc(db, "agents", agentDoc.id), {
+      //   lastLoginAt: new Date().toISOString(),
+      // });
+
+      // Store agent session data (you can use AsyncStorage or context)
+      // For now, we'll use a simple approach
+      // global.currentAgent = {
+      //   id: agentDoc.id,
+      //   ...agentData,
+      // };
+
+      await AsyncStorage.setItem("agentEmail", userEmail);
+      // Navigate to agent dashboard
       router.push("/screens/AddNewLead");
-      // Placeholder for Firebase authentication
-      // const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Navigation to home screen after successful login
     } catch (error: any) {
+      console.error("Login error:", error);
       Alert.alert("Login Error", error.message || "An unknown error occurred");
     } finally {
       setLoading(false);
     }
   };
 
+  const getUserRole = async (uid: string, email: string) => {
+    try {
+      console.log("Checking role for:", { uid, email });
+
+      // Check if user is admin (hardcoded admin emails)
+      const adminEmails = ["adith3939@gmail.com", "admin@example.com"];
+      if (adminEmails.includes(email)) {
+        console.log("User is admin");
+        return "admin";
+      }
+
+      // Check in agents collection by uid first
+      console.log("Checking agents by uid...");
+      const agentsByUidQuery = query(
+        collection(db, "agents"),
+        where("uid", "==", uid)
+      );
+
+      const agentsByUidSnapshot = await getDocs(agentsByUidQuery);
+      console.log("Agents found by uid:", agentsByUidSnapshot.size);
+
+      if (!agentsByUidSnapshot.empty) {
+        const agentData = agentsByUidSnapshot.docs[0].data();
+        console.log("Agent data by uid:", agentData);
+
+        if (agentData.status === "active") {
+          return agentData.role || "agent";
+        } else if (agentData.status === "inactive") {
+          Alert.alert(
+            "Account Inactive",
+            "Your account has been deactivated. Please contact admin."
+          );
+          return null;
+        } else {
+          Alert.alert(
+            "Account Pending",
+            "Your account is still pending approval."
+          );
+          return null;
+        }
+      }
+
+      // If not found by uid, check by email as fallback
+      console.log("Checking agents by email...");
+      const agentsByEmailQuery = query(
+        collection(db, "agents"),
+        where("email", "==", email)
+      );
+
+      const agentsByEmailSnapshot = await getDocs(agentsByEmailQuery);
+      console.log("Agents found by email:", agentsByEmailSnapshot.size);
+
+      if (!agentsByEmailSnapshot.empty) {
+        const agentDoc = agentsByEmailSnapshot.docs[0];
+        const agentData = agentDoc.data();
+        console.log("Agent data by email:", agentData);
+
+        // If agent found by email but no uid, update the uid
+        if (!agentData.uid || agentData.uid !== uid) {
+          console.log("Updating agent uid...");
+          await updateDoc(doc(db, "agents", agentDoc.id), {
+            uid: uid,
+            lastLoginAt: new Date().toISOString(),
+          });
+        }
+
+        if (agentData.status === "active") {
+          return agentData.role || "agent";
+        } else if (agentData.status === "inactive") {
+          Alert.alert(
+            "Account Inactive",
+            "Your account has been deactivated. Please contact admin."
+          );
+          return null;
+        } else {
+          Alert.alert(
+            "Account Pending",
+            "Your account is still pending approval."
+          );
+          return null;
+        }
+      }
+
+      console.log("No agent found in database");
+      return null;
+    } catch (error) {
+      console.error("Error getting user role:", error);
+      Alert.alert(
+        "Error",
+        "Failed to verify user permissions. Please try again."
+      );
+      return null;
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     try {
       console.log("Google Sign In");
-      // Firebase Google sign-in logic will go here
+      Alert.alert("Coming Soon", "Google Sign In will be available soon");
     } catch (error: any) {
       Alert.alert(
         "Google Sign In Error",
@@ -61,7 +212,7 @@ export default function LoginPage() {
   const handleAppleSignIn = async () => {
     try {
       console.log("Apple Sign In");
-      // Firebase Apple sign-in logic will go here
+      Alert.alert("Coming Soon", "Apple Sign In will be available soon");
     } catch (error: any) {
       Alert.alert(
         "Apple Sign In Error",
@@ -71,8 +222,10 @@ export default function LoginPage() {
   };
 
   const handleForgotPassword = () => {
-    console.log("Forgot Password");
-    // Navigate to forgot password screen
+    Alert.alert(
+      "Reset Password",
+      "Please contact admin to reset your password or implement forgot password functionality"
+    );
   };
 
   const handleRegister = () => {
