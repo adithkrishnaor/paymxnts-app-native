@@ -10,7 +10,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -40,27 +40,82 @@ export default function AdminVerificationPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adminUser, setAdminUser] = useState<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Use ref to track if component is mounted
+  const isMountedRef = useRef(true);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const authUnsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Authentication check function
+  const checkAuthentication = (user: any) => {
+    if (!user) {
+      setIsAuthenticated(false);
+      Alert.alert("Authentication Required", "Please log in as admin");
+      router.replace("/screens/homePage"); // Use replace instead of push
+      return false;
+    }
+
+    const adminEmails = ["adith3939@gmail.com", "admin@example.com"];
+    if (!adminEmails.includes(user.email?.toLowerCase() || "")) {
+      setIsAuthenticated(false);
+      Alert.alert("Access Denied", "You don't have admin privileges");
+      router.replace("/screens/homePage"); // Use replace instead of push
+      return false;
+    }
+
+    setIsAuthenticated(true);
+    setAdminUser(user);
+    return true;
+  };
 
   useEffect(() => {
-    // Check if user is authenticated and is admin
+    isMountedRef.current = true;
+
+    // Set up authentication state listener
+    const authUnsubscribe = auth.onAuthStateChanged((user) => {
+      if (!isMountedRef.current) return;
+
+      if (!checkAuthentication(user)) {
+        // Clean up existing listeners if authentication fails
+        if (unsubscribeRef.current) {
+          unsubscribeRef.current();
+          unsubscribeRef.current = null;
+        }
+        return;
+      }
+
+      // If authentication is successful, set up Firestore listener
+      if (user && isAuthenticated) {
+        setupFirestoreListener();
+      }
+    });
+
+    authUnsubscribeRef.current = authUnsubscribe;
+
+    // Initial authentication check
     const currentUser = auth.currentUser;
-    if (!currentUser) {
-      Alert.alert("Authentication Required", "Please log in as admin");
-      router.push("/screens/LoginPage");
-      return;
+    checkAuthentication(currentUser);
+
+    return () => {
+      isMountedRef.current = false;
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+      if (authUnsubscribeRef.current) {
+        authUnsubscribeRef.current();
+        authUnsubscribeRef.current = null;
+      }
+    };
+  }, []);
+
+  // Separate function to set up Firestore listener
+  const setupFirestoreListener = () => {
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current(); // Clean up existing listener
     }
 
-    const adminEmails = ["adith3939@gmail.com", "admin@example.com"]; // Add your admin emails
-    if (!adminEmails.includes(currentUser.email?.toLowerCase() || "")) {
-      Alert.alert("Access Denied", "You don't have admin privileges");
-      router.push("/screens/LoginPage");
-      return;
-    }
-
-    // Store admin user info
-    setAdminUser(currentUser);
-
-    // Listen for pending verification requests
     const q = query(
       collection(db, "agentVerifications"),
       where("status", "==", "pending")
@@ -69,6 +124,8 @@ export default function AdminVerificationPage() {
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
+        if (!isMountedRef.current || !isAuthenticated) return;
+
         const pendingRequests: VerificationRequest[] = [];
         querySnapshot.forEach((doc) => {
           pendingRequests.push({
@@ -80,19 +137,50 @@ export default function AdminVerificationPage() {
         setError(null);
       },
       (error) => {
+        if (!isMountedRef.current) return;
+
         console.error("Firestore error:", error);
         setError("Permission denied. Please ensure you're logged in as admin.");
+        setIsAuthenticated(false);
         Alert.alert(
           "Permission Error",
-          "You don't have permission to access this data. Please ensure you're logged in as admin."
+          "You don't have permission to access this data. Please log in again.",
+          [
+            {
+              text: "OK",
+              onPress: () => router.replace("/screens/homePage"),
+            },
+          ]
         );
       }
     );
 
-    return () => unsubscribe();
+    unsubscribeRef.current = unsubscribe;
+  };
+
+  // Re-check authentication whenever the component becomes focused
+  useEffect(() => {
+    const handleFocus = () => {
+      const currentUser = auth.currentUser;
+      if (!checkAuthentication(currentUser)) {
+        return;
+      }
+    };
+
+    // You might need to add a focus listener here depending on your navigation setup
+    // This is a simplified version - you may need to use navigation focus events
+
+    return () => {};
   }, []);
 
   const handleApprove = async (request: VerificationRequest) => {
+    // Re-check authentication before performing admin actions
+    if (!auth.currentUser || !isAuthenticated) {
+      Alert.alert("Authentication Error", "Please log in again");
+      router.replace("/screens/homePage");
+      return;
+    }
+
     Alert.alert(
       "Approve Agent",
       `Are you sure you want to approve ${request.firstName} ${request.lastName}?`,
@@ -124,9 +212,22 @@ export default function AdminVerificationPage() {
               Alert.alert("Success", "Agent approved successfully!");
             } catch (error: any) {
               console.error("Error approving agent:", error);
-              Alert.alert("Error", error.message || "Failed to approve agent");
+              if (error.code === "permission-denied") {
+                Alert.alert(
+                  "Permission Error",
+                  "Session expired. Please log in again."
+                );
+                router.replace("/screens/homePage");
+              } else {
+                Alert.alert(
+                  "Error",
+                  error.message || "Failed to approve agent"
+                );
+              }
             } finally {
-              setLoading(false);
+              if (isMountedRef.current) {
+                setLoading(false);
+              }
             }
           },
         },
@@ -135,6 +236,13 @@ export default function AdminVerificationPage() {
   };
 
   const handleReject = async (request: VerificationRequest) => {
+    // Re-check authentication before performing admin actions
+    if (!auth.currentUser || !isAuthenticated) {
+      Alert.alert("Authentication Error", "Please log in again");
+      router.replace("/screens/homePage");
+      return;
+    }
+
     Alert.alert(
       "Reject Agent",
       `Are you sure you want to reject ${request.firstName} ${request.lastName}?`,
@@ -159,9 +267,19 @@ export default function AdminVerificationPage() {
               Alert.alert("Success", "Agent registration rejected and removed");
             } catch (error: any) {
               console.error("Error rejecting agent:", error);
-              Alert.alert("Error", error.message || "Failed to reject agent");
+              if (error.code === "permission-denied") {
+                Alert.alert(
+                  "Permission Error",
+                  "Session expired. Please log in again."
+                );
+                router.replace("/screens/homePage");
+              } else {
+                Alert.alert("Error", error.message || "Failed to reject agent");
+              }
             } finally {
-              setLoading(false);
+              if (isMountedRef.current) {
+                setLoading(false);
+              }
             }
           },
         },
@@ -170,9 +288,20 @@ export default function AdminVerificationPage() {
   };
 
   const onRefresh = () => {
+    // Re-check authentication before refreshing
+    if (!auth.currentUser || !isAuthenticated) {
+      Alert.alert("Authentication Error", "Please log in again");
+      router.replace("/screens/homePage");
+      return;
+    }
+
     setRefreshing(true);
     // The real-time listener will automatically update the data
-    setTimeout(() => setRefreshing(false), 1000);
+    setTimeout(() => {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }, 1000);
   };
 
   const handleSignOut = () => {
@@ -182,8 +311,25 @@ export default function AdminVerificationPage() {
         text: "Sign Out",
         onPress: async () => {
           try {
+            // Clean up listeners before signing out
+            if (unsubscribeRef.current) {
+              unsubscribeRef.current();
+              unsubscribeRef.current = null;
+            }
+            if (authUnsubscribeRef.current) {
+              authUnsubscribeRef.current();
+              authUnsubscribeRef.current = null;
+            }
+
+            // Mark component as unmounted to prevent state updates
+            isMountedRef.current = false;
+            setIsAuthenticated(false);
+
+            // Sign out from Firebase
             await auth.signOut();
-            router.push("/screens/LoginPage");
+
+            // Use replace to clear navigation stack and prevent back navigation
+            router.replace("/screens/homePage");
           } catch (error) {
             console.error("Error signing out:", error);
             Alert.alert("Error", "Failed to sign out");
@@ -194,8 +340,6 @@ export default function AdminVerificationPage() {
   };
 
   const renderRequest = ({ item }: { item: VerificationRequest }) => {
-    console.log("Rendering request:", item.id, "loading state:", loading);
-
     return (
       <View style={styles.requestCard}>
         <View style={styles.requestHeader}>
@@ -218,12 +362,9 @@ export default function AdminVerificationPage() {
             style={[
               styles.actionButton,
               styles.approveButton,
-              loading && styles.disabledButton, // Add this style if needed
+              loading && styles.disabledButton,
             ]}
-            onPress={() => {
-              console.log("Approve button pressed for:", item.id);
-              handleApprove(item);
-            }}
+            onPress={() => handleApprove(item)}
             disabled={loading}
           >
             <Ionicons name="checkmark" size={20} color="#fff" />
@@ -236,12 +377,9 @@ export default function AdminVerificationPage() {
             style={[
               styles.actionButton,
               styles.rejectButton,
-              loading && styles.disabledButton, // Add this style if needed
+              loading && styles.disabledButton,
             ]}
-            onPress={() => {
-              console.log("Reject button pressed for:", item.id);
-              handleReject(item);
-            }}
+            onPress={() => handleReject(item)}
             disabled={loading}
           >
             <Ionicons name="close" size={20} color="#fff" />
@@ -254,20 +392,33 @@ export default function AdminVerificationPage() {
     );
   };
 
-  if (error) {
+  // Show loading screen while checking authentication
+  if (!isAuthenticated && !error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Verifying authentication...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="warning" size={60} color="#f44336" />
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>
+            {error || "Authentication required"}
+          </Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => {
               setError(null);
-              router.push("/screens/LoginPage");
+              router.replace("/screens/homePage");
             }}
           >
-            <Text style={styles.retryButtonText}>Go to Login</Text>
+            <Text style={styles.retryButtonText}>Go to Home</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -438,5 +589,14 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
   },
 });

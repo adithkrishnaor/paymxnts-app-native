@@ -52,7 +52,8 @@ export default function AddNewLead() {
         const storedAgentEmail = await AsyncStorage.getItem("agentEmail");
 
         if (!storedAgentEmail) {
-          router.push("/screens/LoginPage");
+          // Clear navigation stack and redirect to home
+          router.replace("/screens/homePage");
           return;
         }
 
@@ -65,7 +66,8 @@ export default function AddNewLead() {
 
         if (agentSnapshot.empty) {
           Alert.alert("Error", "Agent not found");
-          router.push("/screens/LoginPage");
+          // Clear navigation stack and redirect to home
+          router.replace("/screens/homePage");
           return;
         }
 
@@ -76,7 +78,8 @@ export default function AddNewLead() {
       } catch (error) {
         console.error("Error fetching agent data:", error);
         Alert.alert("Error", "Failed to load agent data");
-        router.push("/screens/LoginPage");
+        // Clear navigation stack and redirect to home
+        router.replace("/screens/homePage");
       } finally {
         setLoadingAgent(false);
       }
@@ -402,11 +405,41 @@ ${COMPANY_NAME} Lead Management System
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem("agentEmail");
-      router.push("/screens/LoginPage");
+      // Show confirmation dialog before logout
+      Alert.alert("Confirm Logout", "Are you sure you want to logout?", [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Clear the stored email
+              await AsyncStorage.removeItem("agentEmail");
+
+              // Clear any other stored authentication data if needed
+              // await AsyncStorage.multiRemove(['agentEmail', 'otherAuthData']);
+
+              // Use replace instead of push to clear navigation stack
+              // This prevents users from going back to authenticated screens
+              router.replace("/screens/homePage");
+
+              console.log("User logged out successfully");
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert(
+                "Logout Error",
+                "Failed to log out. Please try again."
+              );
+            }
+          },
+        },
+      ]);
     } catch (error) {
-      Alert.alert("Logout Error", "Failed to log out. Please try again.");
-      console.error("Logout error:", error);
+      console.error("Logout confirmation error:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
     }
   };
 

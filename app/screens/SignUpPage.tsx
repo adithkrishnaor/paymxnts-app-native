@@ -1,6 +1,5 @@
 import { db } from "@/config/FirebaseConfig";
 import { Ionicons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import { addDoc, collection } from "firebase/firestore";
 import React, { useState } from "react";
@@ -27,7 +26,6 @@ export default function SignUpPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [countryCode, setCountryCode] = useState("+91");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -65,7 +63,7 @@ export default function SignUpPage() {
         firstName,
         lastName,
         email,
-        phone: countryCode + phone,
+        phone: phone,
         password, // In production, hash this before storing
         status: "pending",
         createdAt: new Date().toISOString(),
@@ -212,18 +210,6 @@ export default function SignUpPage() {
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Phone</Text>
             <View style={styles.phoneInputWrapper}>
-              <View style={styles.countryCodeContainer}>
-                <Picker
-                  selectedValue={countryCode}
-                  onValueChange={setCountryCode}
-                  style={styles.countryCodePicker}
-                >
-                  <Picker.Item label="+91" value="+91" />
-                  <Picker.Item label="+1" value="+1" />
-                  <Picker.Item label="+44" value="+44" />
-                  <Picker.Item label="+86" value="+86" />
-                </Picker>
-              </View>
               <TextInput
                 style={styles.phoneInput}
                 placeholder="Enter mobile number"
