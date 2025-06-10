@@ -1,15 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
-import * as FileSystem from "expo-file-system";
-import * as MailComposer from "expo-mail-composer";
 import { useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  query,
+  serverTimestamp,
+  where,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -28,23 +33,19 @@ export default function AddNewLead() {
   const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
-  const [zipCode, setZipCode] = useState("");
+  const [cityState, setCityState] = useState("");
   const [creditProcessingVolume, setCreditProcessingVolume] = useState("");
-  const [notes, setNotes] = useState("");
+  const [pointsOfSale, setPointsOfSale] = useState("");
+  const [businessLocations, setBusinessLocations] = useState("");
+  const [otherNotes, setOtherNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentEmail, setAgentEmail] = useState("");
+  const [agentId, setAgentId] = useState("");
   const [loadingAgent, setLoadingAgent] = useState(true);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const volumeOptions = [
-    "Select Volume",
-    "Under $25,000/Month",
-    "Over $25,000/Month",
-  ];
-
-  // Configuration - you can move these to a config file
-  const RECIPIENT_EMAIL = "adthkrshna@gmail.com"; // Change this to your desired email
-  const COMPANY_NAME = "Adith Company";
+  const volumeOptions = ["Under $25,000/month", "Over $25,000/month"];
 
   useEffect(() => {
     const fetchAgentData = async () => {
@@ -52,7 +53,6 @@ export default function AddNewLead() {
         const storedAgentEmail = await AsyncStorage.getItem("agentEmail");
 
         if (!storedAgentEmail) {
-          // Clear navigation stack and redirect to home
           router.replace("/screens/homePage");
           return;
         }
@@ -66,7 +66,6 @@ export default function AddNewLead() {
 
         if (agentSnapshot.empty) {
           Alert.alert("Error", "Agent not found");
-          // Clear navigation stack and redirect to home
           router.replace("/screens/homePage");
           return;
         }
@@ -75,10 +74,10 @@ export default function AddNewLead() {
         const agentData = agentDoc.data();
         setAgentName(`${agentData.firstName} ${agentData.lastName}`);
         setAgentEmail(storedAgentEmail);
+        setAgentId(agentDoc.id);
       } catch (error) {
         console.error("Error fetching agent data:", error);
         Alert.alert("Error", "Failed to load agent data");
-        // Clear navigation stack and redirect to home
         router.replace("/screens/homePage");
       } finally {
         setLoadingAgent(false);
@@ -88,309 +87,6 @@ export default function AddNewLead() {
     fetchAgentData();
   }, []);
 
-  const generateCSVContent = (leadData: any) => {
-    // CSV headers
-    const headers = [
-      "First Name",
-      "Last Name",
-      "Business Name",
-      "Phone",
-      "Email Address",
-      "Zip Code",
-      "Credit Processing Volume",
-      "Notes",
-      "Agent Name",
-      "Agent Email",
-      "Submission Date",
-      "Submission Time",
-    ];
-
-    // Current date and time
-    const now = new Date();
-    const submissionDate = now.toLocaleDateString();
-    const submissionTime = now.toLocaleTimeString();
-
-    // CSV data row - properly escape all fields
-    const dataRow = [
-      `"${leadData.firstName.replace(/"/g, '""')}"`,
-      `"${leadData.lastName.replace(/"/g, '""')}"`,
-      `"${leadData.businessName.replace(/"/g, '""')}"`,
-      `"${leadData.phone.replace(/"/g, '""')}"`,
-      `"${leadData.emailAddress.replace(/"/g, '""')}"`,
-      `"${leadData.zipCode.replace(/"/g, '""')}"`,
-      `"${leadData.creditProcessingVolume.replace(/"/g, '""')}"`,
-      `"${leadData.notes.replace(/"/g, '""')}"`,
-      `"${agentName.replace(/"/g, '""')}"`,
-      `"${agentEmail.replace(/"/g, '""')}"`,
-      `"${submissionDate}"`,
-      `"${submissionTime}"`,
-    ];
-
-    // Combine headers and data
-    const csvContent = [headers.join(","), dataRow.join(",")].join("\n");
-
-    return csvContent;
-  };
-
-  const generateCSVFileName = () => {
-    const now = new Date();
-    const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
-    const timeStr = now.toTimeString().split(" ")[0].replace(/:/g, "-"); // HH-MM-SS
-    const cleanFirstName = firstName.replace(/[^a-zA-Z0-9]/g, "");
-    const cleanLastName = lastName.replace(/[^a-zA-Z0-9]/g, "");
-    return `lead_${cleanFirstName}_${cleanLastName}_${dateStr}_${timeStr}.csv`;
-  };
-
-  const sendLeadViaEmail = async (leadData: any) => {
-    try {
-      console.log("Starting email send process...");
-
-      // In Expo Go, MailComposer might not work properly, so we'll use sharing as primary method
-      // and provide email as a sharing option
-
-      // Check if we're in Expo Go environment
-      const isExpoGo = __DEV__ && Platform.OS !== "web";
-
-      if (isExpoGo) {
-        console.log("Detected Expo Go environment, using sharing method");
-        return await sendViaSharing(leadData);
-      }
-
-      // Check if mail composer is available
-      const isMailAvailable = await MailComposer.isAvailableAsync();
-      console.log("Mail available:", isMailAvailable);
-
-      if (!isMailAvailable) {
-        console.log("Mail not available, falling back to sharing");
-        return await sendViaSharing(leadData);
-      }
-
-      // Generate CSV content
-      const csvContent = generateCSVContent(leadData);
-      const fileName = generateCSVFileName();
-
-      // Create temporary file
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      console.log("Creating CSV file at:", fileUri);
-
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      console.log("CSV file created successfully");
-
-      // Compose email with agent as sender
-      const emailOptions: MailComposer.MailComposerOptions = {
-        recipients: [RECIPIENT_EMAIL],
-        subject: `New Lead Submission - ${leadData.firstName} ${leadData.lastName}`,
-        body: `
-Dear Team,
-
-A new lead has been submitted by ${agentName}.
-
-Lead Details:
-- Name: ${leadData.firstName} ${leadData.lastName}
-- Business: ${leadData.businessName}
-- Phone: ${leadData.phone}
-- Email: ${leadData.emailAddress}
-- Zip Code: ${leadData.zipCode}
-- Processing Volume: ${leadData.creditProcessingVolume}
-- Notes: ${leadData.notes}
-
-Agent: ${agentName} (${agentEmail})
-Submission Date: ${new Date().toLocaleString()}
-
-Please find the detailed information in the attached CSV file.
-
-Best regards,
-${COMPANY_NAME} Lead Management System
-        `,
-        attachments: [fileUri],
-        isHtml: false,
-      };
-
-      console.log("Composing email with options:", {
-        recipients: emailOptions.recipients,
-        subject: emailOptions.subject,
-        hasAttachment: !!emailOptions.attachments?.length,
-      });
-
-      // Send email
-      const result = await MailComposer.composeAsync(emailOptions);
-      console.log("Email composer result:", result);
-
-      // Clean up temporary file
-      try {
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        console.log("Temporary file cleaned up");
-      } catch (cleanupError) {
-        console.warn("Failed to cleanup temporary file:", cleanupError);
-      }
-
-      if (result.status === MailComposer.MailComposerStatus.SENT) {
-        Alert.alert("Success", "Lead submitted and email sent successfully!");
-        return true;
-      } else if (result.status === MailComposer.MailComposerStatus.CANCELLED) {
-        Alert.alert("Cancelled", "Email composition was cancelled");
-        return false;
-      } else if (result.status === MailComposer.MailComposerStatus.SAVED) {
-        Alert.alert("Saved", "Email has been saved to drafts");
-        return true;
-      } else {
-        console.log("Unexpected email result status:", result.status);
-        Alert.alert(
-          "Notice",
-          "Email composer closed. Please check if the email was sent."
-        );
-        return false;
-      }
-    } catch (error) {
-      console.error("Email sending error:", error);
-      console.log("Falling back to sharing method due to error");
-      return await sendViaSharing(leadData);
-    }
-  };
-
-  const sendViaSharing = async (leadData: any) => {
-    try {
-      console.log("Using sharing method for lead submission");
-
-      // Generate email content as text
-      const emailContent = `
-TO: ${RECIPIENT_EMAIL}
-SUBJECT: New Lead Submission - ${leadData.firstName} ${leadData.lastName}
-
-Dear Team,
-
-A new lead has been submitted by ${agentName}.
-
-Lead Details:
-- Name: ${leadData.firstName} ${leadData.lastName}
-- Business: ${leadData.businessName}
-- Phone: ${leadData.phone}
-- Email: ${leadData.emailAddress}
-- Zip Code: ${leadData.zipCode}
-- Processing Volume: ${leadData.creditProcessingVolume}
-- Notes: ${leadData.notes}
-
-Agent: ${agentName} (${agentEmail})
-Submission Date: ${new Date().toLocaleString()}
-
-CSV data is included below:
-${generateCSVContent(leadData)}
-
-Best regards,
-${COMPANY_NAME} Lead Management System
-      `;
-
-      // Create text file with email content
-      const fileName = `lead_${leadData.firstName}_${leadData.lastName}_${
-        new Date().toISOString().split("T")[0]
-      }.txt`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.writeAsStringAsync(fileUri, emailContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      console.log("Lead file created for sharing:", fileUri);
-
-      // Check if sharing is available
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-      console.log("Sharing available:", isSharingAvailable);
-
-      if (isSharingAvailable) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: "text/plain",
-          dialogTitle: "Share Lead Information",
-        });
-
-        Alert.alert(
-          "Lead Prepared",
-          `Lead information has been prepared for sharing. You can email it to ${RECIPIENT_EMAIL} or share via any app.`,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                console.log("Lead sharing completed successfully");
-              },
-            },
-          ]
-        );
-
-        return true;
-      } else {
-        // Fallback: Show the content in an alert for copying
-        Alert.alert(
-          "Lead Information",
-          `Please copy this information and send to ${RECIPIENT_EMAIL}:\n\n${emailContent.substring(
-            0,
-            500
-          )}...`,
-          [
-            {
-              text: "OK",
-            },
-          ]
-        );
-        return true;
-      }
-    } catch (error) {
-      console.error("Sharing method error:", error);
-      Alert.alert("Error", "Failed to prepare lead for sharing");
-      return false;
-    }
-  };
-
-  const saveAndShareCSV = async (leadData: any) => {
-    try {
-      console.log("Generating CSV for sharing...");
-
-      const csvContent = generateCSVContent(leadData);
-      const fileName = generateCSVFileName();
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      console.log("CSV file created for sharing:", fileUri);
-
-      // Check if sharing is available
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-      console.log("Sharing available:", isSharingAvailable);
-
-      if (isSharingAvailable) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: "text/csv",
-          dialogTitle: "Share Lead CSV",
-        });
-
-        Alert.alert(
-          "CSV Generated",
-          `Lead data has been saved as ${fileName}. You can share it via your preferred method.`,
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                console.log("CSV sharing completed successfully");
-              },
-            },
-          ]
-        );
-
-        return true;
-      } else {
-        Alert.alert("Error", "Unable to share the CSV file on this device");
-        return false;
-      }
-    } catch (error) {
-      console.error("CSV generation error:", error);
-      Alert.alert("Error", "Failed to generate CSV file");
-      return false;
-    }
-  };
-
   const resetForm = () => {
     console.log("Resetting form...");
     setFirstName("");
@@ -398,14 +94,15 @@ ${COMPANY_NAME} Lead Management System
     setBusinessName("");
     setPhone("");
     setEmailAddress("");
-    setZipCode("");
+    setCityState("");
     setCreditProcessingVolume("");
-    setNotes("");
+    setPointsOfSale("");
+    setBusinessLocations("");
+    setOtherNotes("");
   };
 
   const handleLogout = async () => {
     try {
-      // Show confirmation dialog before logout
       Alert.alert("Confirm Logout", "Are you sure you want to logout?", [
         {
           text: "Cancel",
@@ -416,16 +113,8 @@ ${COMPANY_NAME} Lead Management System
           style: "destructive",
           onPress: async () => {
             try {
-              // Clear the stored email
               await AsyncStorage.removeItem("agentEmail");
-
-              // Clear any other stored authentication data if needed
-              // await AsyncStorage.multiRemove(['agentEmail', 'otherAuthData']);
-
-              // Use replace instead of push to clear navigation stack
-              // This prevents users from going back to authenticated screens
               router.replace("/screens/homePage");
-
               console.log("User logged out successfully");
             } catch (error) {
               console.error("Logout error:", error);
@@ -441,6 +130,10 @@ ${COMPANY_NAME} Lead Management System
       console.error("Logout confirmation error:", error);
       Alert.alert("Error", "Something went wrong. Please try again.");
     }
+  };
+
+  const handleViewLeads = () => {
+    router.push("/screens/ViewLeads");
   };
 
   const validateForm = () => {
@@ -464,6 +157,10 @@ ${COMPANY_NAME} Lead Management System
       Alert.alert("Validation Error", "Email Address is required");
       return false;
     }
+    if (!cityState.trim()) {
+      Alert.alert("Validation Error", "City/State is required");
+      return false;
+    }
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -472,7 +169,7 @@ ${COMPANY_NAME} Lead Management System
       return false;
     }
 
-    // Phone validation (more flexible)
+    // Phone validation
     const phoneRegex = /^[\d\s\-\+\(\)\.]+$/;
     if (!phoneRegex.test(phone.trim()) || phone.trim().length < 10) {
       Alert.alert(
@@ -482,8 +179,11 @@ ${COMPANY_NAME} Lead Management System
       return false;
     }
 
-    if (!creditProcessingVolume || creditProcessingVolume === "") {
-      Alert.alert("Validation Error", "Please select Credit Processing Volume");
+    if (!creditProcessingVolume) {
+      Alert.alert(
+        "Validation Error",
+        "Please select Monthly Credit Card Processing volume"
+      );
       return false;
     }
 
@@ -497,7 +197,7 @@ ${COMPANY_NAME} Lead Management System
       return;
     }
 
-    if (!agentName || !agentEmail) {
+    if (!agentName || !agentEmail || !agentId) {
       Alert.alert(
         "Error",
         "Agent information not loaded. Please try logging in again."
@@ -514,20 +214,28 @@ ${COMPANY_NAME} Lead Management System
         businessName: businessName.trim(),
         phone: phone.trim(),
         emailAddress: emailAddress.trim(),
-        zipCode: zipCode.trim(),
+        cityState: cityState.trim(),
         creditProcessingVolume,
-        notes: notes.trim(),
+        pointsOfSale: pointsOfSale.trim(),
+        businessLocations: businessLocations.trim(),
+        otherNotes: otherNotes.trim(),
+        agentId,
+        agentName,
+        agentEmail,
+        createdAt: serverTimestamp(),
+        status: "new",
       };
 
       console.log("Saving lead:", leadData);
 
-      // Send lead via email as CSV or sharing
-      const leadSent = await sendLeadViaEmail(leadData);
+      // Save to Firestore
+      await addDoc(collection(db, "leads"), leadData);
 
-      if (leadSent) {
-        // Reset form only if lead was sent/shared successfully
-        resetForm();
-      }
+      // Show success modal
+      setShowSuccessModal(true);
+
+      // Reset form
+      resetForm();
     } catch (error: any) {
       console.error("Save error:", error);
       Alert.alert(
@@ -538,6 +246,33 @@ ${COMPANY_NAME} Lead Management System
       setLoading(false);
     }
   };
+
+  const SuccessModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showSuccessModal}
+      onRequestClose={() => setShowSuccessModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
+            <Text style={styles.modalTitle}>Success!</Text>
+            <Text style={styles.modalMessage}>
+              New lead has been added successfully
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (loadingAgent) {
     return (
@@ -565,9 +300,21 @@ ${COMPANY_NAME} Lead Management System
               <Text style={styles.welcomeText}>Welcome Back</Text>
               <Text style={styles.userName}>{agentName || "Agent"}</Text>
             </View>
-            <TouchableOpacity style={styles.profileIcon} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={24} color="#666" />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.viewLeadsButton}
+                onPress={handleViewLeads}
+              >
+                <Ionicons name="list-outline" size={20} color="#666" />
+                <Text style={styles.viewLeadsText}>View Leads</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.profileIcon}
+                onPress={handleLogout}
+              >
+                <Ionicons name="log-out-outline" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Title */}
@@ -661,17 +408,17 @@ ${COMPANY_NAME} Lead Management System
             </View>
           </View>
 
-          {/* Zip Code */}
+          {/* City/State */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Zip Code</Text>
+            <Text style={styles.inputLabel}>City/State *</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.textInput}
-                placeholder="Enter Zip Code"
+                placeholder="Enter City, State"
                 placeholderTextColor="#999"
-                value={zipCode}
-                onChangeText={setZipCode}
-                keyboardType="numeric"
+                value={cityState}
+                onChangeText={setCityState}
+                autoCapitalize="words"
                 autoCorrect={false}
               />
               <Ionicons
@@ -683,51 +430,93 @@ ${COMPANY_NAME} Lead Management System
             </View>
           </View>
 
-          {/* Credit Processing Volume */}
+          {/* Monthly Credit Card Processing */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Credit Processing Volume *</Text>
+            <Text style={styles.inputLabel}>
+              Monthly Credit Card Processing *
+            </Text>
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={creditProcessingVolume}
-                onValueChange={(itemValue) => {
-                  if (itemValue !== "") {
-                    setCreditProcessingVolume(itemValue);
-                  }
-                }}
+                onValueChange={(itemValue) =>
+                  setCreditProcessingVolume(itemValue)
+                }
                 style={styles.picker}
               >
+                <Picker.Item
+                  label="Select Processing Volume"
+                  value=""
+                  color="#999"
+                />
                 {volumeOptions.map((option, index) => (
                   <Picker.Item
                     key={index}
                     label={option}
-                    value={index === 0 ? "" : option}
-                    color={
-                      index === 0 && creditProcessingVolume === ""
-                        ? "#999"
-                        : "#333"
-                    }
+                    value={option}
+                    color="#333"
                   />
                 ))}
               </Picker>
             </View>
           </View>
 
-          {/* Notes */}
+          {/* Notes Section */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Notes</Text>
-            <View style={styles.notesWrapper}>
-              <TextInput
-                style={styles.notesInput}
-                placeholder="Add notes here..."
-                placeholderTextColor="#999"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                autoCapitalize="sentences"
-                autoCorrect={true}
-              />
+            <Text style={styles.inputLabel}>Notes (Optional)</Text>
+
+            {/* Points of Sale */}
+            <View style={styles.notesSubContainer}>
+              <Text style={styles.notesSubLabel}>
+                How many Points of Sale currently have:
+              </Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Number of POS systems"
+                  placeholderTextColor="#999"
+                  value={pointsOfSale}
+                  onChangeText={setPointsOfSale}
+                  keyboardType="numeric"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+
+            {/* Business Locations */}
+            <View style={styles.notesSubContainer}>
+              <Text style={styles.notesSubLabel}>
+                How many Business locations:
+              </Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Number of locations"
+                  placeholderTextColor="#999"
+                  value={businessLocations}
+                  onChangeText={setBusinessLocations}
+                  keyboardType="numeric"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+
+            {/* Other Notes */}
+            <View style={styles.notesSubContainer}>
+              <Text style={styles.notesSubLabel}>Other notes:</Text>
+              <View style={styles.notesWrapper}>
+                <TextInput
+                  style={styles.notesInput}
+                  placeholder="Add other notes here..."
+                  placeholderTextColor="#999"
+                  value={otherNotes}
+                  onChangeText={setOtherNotes}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  autoCapitalize="sentences"
+                  autoCorrect={true}
+                />
+              </View>
             </View>
           </View>
 
@@ -743,6 +532,8 @@ ${COMPANY_NAME} Lead Management System
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <SuccessModal />
     </SafeAreaView>
   );
 }
@@ -790,6 +581,33 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 50,
+    gap: 10,
+  },
+  viewLeadsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  viewLeadsText: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 4,
+  },
   profileIcon: {
     width: 40,
     height: 40,
@@ -805,7 +623,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
-    marginTop: 50,
   },
   title: {
     fontSize: 22,
@@ -876,8 +693,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
   },
-  pickerIcon: {
-    paddingHorizontal: 16,
+  notesSubContainer: {
+    marginBottom: 15,
+  },
+  notesSubLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#555",
+    marginBottom: 8,
   },
   notesWrapper: {
     backgroundColor: "#fff",
@@ -894,7 +717,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   notesInput: {
-    height: 100,
+    height: 80,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
@@ -924,7 +747,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  pickerPlaceholder: {
-    color: "#999",
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: "80%",
+    maxWidth: 300,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 30,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 25,
+  },
+  modalButton: {
+    backgroundColor: "#FFD700",
+    borderRadius: 10,
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    minWidth: 100,
+  },
+  modalButtonText: {
+    color: "#333",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });
