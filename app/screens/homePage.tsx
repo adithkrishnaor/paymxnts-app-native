@@ -3,15 +3,18 @@ import React from "react";
 import {
   Dimensions,
   Image,
-  SafeAreaView,
+  Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width, height } = Dimensions.get("window");
-export default function LoginPage() {
+
+export default function HomePage() {
   const router = useRouter();
   const handleLogin = () => {
     console.log("Login pressed");
@@ -24,28 +27,24 @@ export default function LoginPage() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Spacing */}
+    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+
+      {/* Top Spacing - Reduced for iOS since SafeAreaView handles top spacing */}
       <View style={styles.topSpacing} />
 
-      {/* Top Image Container - Much Larger */}
+      {/* Top Image Container */}
       <View style={styles.topImageContainer}>
         <Image
-          // source={{
-          //   uri: "https://fiverr-res.cloudinary.com/image/upload/f_auto,q_auto/v1/secured-attachments/messaging_message/attachment/ee0e9c1f8c1cfc1250ded0e4d598679e-1747666020533/Logo%20-PaymXnts-01.jpg?__cld_token__=exp=1748450947~hmac=9e61c2fd187dbe437e19461a497912c4c27369b2abc306d253baad1efdc71964",
-          // }}
           source={require("../../assets/images/Logo_Name.png")}
           style={styles.scribbleImage}
           resizeMode="contain"
         />
       </View>
 
-      {/* Bottom Image Container - Much Larger */}
+      {/* Bottom Image Container */}
       <View style={styles.bottomImageContainer}>
         <Image
-          // source={{
-          //   uri: "https://fiverr-res.cloudinary.com/image/upload/f_auto,q_auto/v1/secured-attachments/messaging_message/attachment/8820d01053fab874695e115aeb4ee333-1747666020462/Logo%20X%20Only%20-PaymXnts-01.jpg?__cld_token__=exp=1748446961~hmac=6fbfd919ae6619db2124f04db59dece6ac9625d9e56335e3af5f5c25cb41d880",
-          // }}
           style={styles.scribbleImage}
           source={require("../../assets/images/Logo_PaymXnts.png")}
           resizeMode="contain"
@@ -77,7 +76,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   topSpacing: {
-    height: 15,
+    height: Platform.OS === "ios" ? 5 : 15, // Less spacing needed on iOS with SafeAreaView
   },
   topImageContainer: {
     height: height * 0.32, // 32% of screen height

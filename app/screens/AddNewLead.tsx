@@ -16,14 +16,15 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../config/FirebaseConfig";
 
 export default function AddNewLead() {
@@ -276,7 +277,11 @@ export default function AddNewLead() {
 
   if (loadingAgent) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={styles.container}
+        edges={["right", "left", "bottom"]}
+      >
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.centerContainer}>
           <Text style={styles.loadingText}>Loading agent information...</Text>
         </View>
@@ -285,7 +290,8 @@ export default function AddNewLead() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -294,7 +300,7 @@ export default function AddNewLead() {
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
+          {/* Header - Update to remove top padding that was compensating for status bar */}
           <View style={styles.headerContainer}>
             <View style={styles.welcomeContainer}>
               <Text style={styles.welcomeText}>Welcome Back</Text>
@@ -566,10 +572,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 30,
+    marginTop: 10,
   },
   welcomeContainer: {
     flex: 1,
-    marginTop: 50,
+    marginTop: 10,
   },
   welcomeText: {
     fontSize: 14,
@@ -584,7 +591,7 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 50,
+    marginTop: 10,
     gap: 10,
   },
   viewLeadsButton: {

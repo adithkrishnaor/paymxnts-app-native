@@ -2,12 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
-  SafeAreaView,
+  Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PendingPage() {
   const router = useRouter();
@@ -18,7 +20,8 @@ export default function PendingPage() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <View style={styles.content}>
         <View style={styles.iconContainer}>
           <Ionicons name="hourglass-outline" size={80} color="#FFD700" />
@@ -60,6 +63,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? 20 : 0,
   },
   iconContainer: {
     marginBottom: 30,

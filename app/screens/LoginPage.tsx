@@ -46,14 +46,36 @@ export default function LoginPage() {
       // Check if user is admin (use Firebase Auth for admins only)
       const adminEmails = ["adith3939@gmail.com", "admin@gmail.com"];
       if (adminEmails.includes(userEmail)) {
-        // Admin login through Firebase Auth
-        const userCredential = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-        router.push("/screens/AdminVerificationPage");
-        return;
+        try {
+          // Admin login through Firebase Auth
+          const userCredential = await signInWithEmailAndPassword(
+            auth,
+            email,
+            password
+          );
+          router.push("/screens/AdminVerificationPage");
+          return;
+        } catch (authError: any) {
+          // Handle specific Firebase Auth errors with custom messages
+          let errorMessage = "Invalid email or password";
+
+          if (
+            authError.code === "auth/user-not-found" ||
+            authError.code === "auth/wrong-password" ||
+            authError.code === "auth/invalid-credential"
+          ) {
+            errorMessage = "Invalid email or password";
+          } else if (authError.code === "auth/too-many-requests") {
+            errorMessage =
+              "Too many failed login attempts. Please try again later.";
+          } else if (authError.code === "auth/network-request-failed") {
+            errorMessage = "Network error. Please check your connection.";
+          }
+
+          Alert.alert("Login Error", errorMessage);
+          setLoading(false);
+          return;
+        }
       }
 
       // Agent login through Firestore validation
@@ -80,120 +102,17 @@ export default function LoginPage() {
       }
 
       // Update last login
-      // await updateDoc(doc(db, "agents", agentDoc.id), {
-      //   lastLoginAt: new Date().toISOString(),
-      // });
-
-      // Store agent session data (you can use AsyncStorage or context)
-      // For now, we'll use a simple approach
-      // global.currentAgent = {
-      //   id: agentDoc.id,
-      //   ...agentData,
-      // };
+      await updateDoc(doc(db, "agents", agentDoc.id), {
+        lastLoginAt: new Date().toISOString(),
+      });
 
       await AsyncStorage.setItem("agentEmail", userEmail);
-      // Navigate to agent dashboard
       router.push("/screens/AddNewLead");
     } catch (error: any) {
       console.error("Login error:", error);
       Alert.alert("Login Error", error.message || "An unknown error occurred");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getUserRole = async (uid: string, email: string) => {
-    try {
-      console.log("Checking role for:", { uid, email });
-
-      // Check if user is admin (hardcoded admin emails)
-      const adminEmails = ["adith3939@gmail.com", "admin@example.com"];
-      if (adminEmails.includes(email)) {
-        console.log("User is admin");
-        return "admin";
-      }
-
-      // Check in agents collection by uid first
-      console.log("Checking agents by uid...");
-      const agentsByUidQuery = query(
-        collection(db, "agents"),
-        where("uid", "==", uid)
-      );
-
-      const agentsByUidSnapshot = await getDocs(agentsByUidQuery);
-      console.log("Agents found by uid:", agentsByUidSnapshot.size);
-
-      if (!agentsByUidSnapshot.empty) {
-        const agentData = agentsByUidSnapshot.docs[0].data();
-        console.log("Agent data by uid:", agentData);
-
-        if (agentData.status === "active") {
-          return agentData.role || "agent";
-        } else if (agentData.status === "inactive") {
-          Alert.alert(
-            "Account Inactive",
-            "Your account has been deactivated. Please contact admin."
-          );
-          return null;
-        } else {
-          Alert.alert(
-            "Account Pending",
-            "Your account is still pending approval."
-          );
-          return null;
-        }
-      }
-
-      // If not found by uid, check by email as fallback
-      console.log("Checking agents by email...");
-      const agentsByEmailQuery = query(
-        collection(db, "agents"),
-        where("email", "==", email)
-      );
-
-      const agentsByEmailSnapshot = await getDocs(agentsByEmailQuery);
-      console.log("Agents found by email:", agentsByEmailSnapshot.size);
-
-      if (!agentsByEmailSnapshot.empty) {
-        const agentDoc = agentsByEmailSnapshot.docs[0];
-        const agentData = agentDoc.data();
-        console.log("Agent data by email:", agentData);
-
-        // If agent found by email but no uid, update the uid
-        if (!agentData.uid || agentData.uid !== uid) {
-          console.log("Updating agent uid...");
-          await updateDoc(doc(db, "agents", agentDoc.id), {
-            uid: uid,
-            lastLoginAt: new Date().toISOString(),
-          });
-        }
-
-        if (agentData.status === "active") {
-          return agentData.role || "agent";
-        } else if (agentData.status === "inactive") {
-          Alert.alert(
-            "Account Inactive",
-            "Your account has been deactivated. Please contact admin."
-          );
-          return null;
-        } else {
-          Alert.alert(
-            "Account Pending",
-            "Your account is still pending approval."
-          );
-          return null;
-        }
-      }
-
-      console.log("No agent found in database");
-      return null;
-    } catch (error) {
-      console.error("Error getting user role:", error);
-      Alert.alert(
-        "Error",
-        "Failed to verify user permissions. Please try again."
-      );
-      return null;
     }
   };
 

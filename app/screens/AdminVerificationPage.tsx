@@ -14,13 +14,15 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
-  SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/FirebaseConfig";
 
 interface VerificationRequest {
@@ -426,7 +428,9 @@ export default function AdminVerificationPage() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Agent Verifications</Text>
@@ -471,6 +475,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    // Add padding for iOS status bar if needed
+    paddingTop: Platform.OS === "ios" ? 10 : 40,
   },
   headerTitle: {
     fontSize: 24,
