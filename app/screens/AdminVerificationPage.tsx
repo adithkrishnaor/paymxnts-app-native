@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   query,
   updateDoc,
@@ -53,6 +54,7 @@ export default function AdminVerificationPage() {
   const checkAuthentication = (user: any) => {
     if (!user) {
       setIsAuthenticated(false);
+      setAdminUser(null);
       Alert.alert("Authentication Required", "Please log in as admin");
       router.replace("/screens/homePage"); // Use replace instead of push
       return false;
@@ -61,13 +63,14 @@ export default function AdminVerificationPage() {
     const adminEmails = ["adith3939@gmail.com", "admin@gmail.com"];
     if (!adminEmails.includes(user.email?.toLowerCase() || "")) {
       setIsAuthenticated(false);
+      setAdminUser(null);
       Alert.alert("Access Denied", "You don't have admin privileges");
       router.replace("/screens/homePage"); // Use replace instead of push
       return false;
     }
 
-    setIsAuthenticated(true);
     setAdminUser(user);
+    setIsAuthenticated(true);
     return true;
   };
 
@@ -88,16 +91,12 @@ export default function AdminVerificationPage() {
       }
 
       // If authentication is successful, set up Firestore listener
-      if (user && isAuthenticated) {
+      if (user) {
         setupFirestoreListener();
       }
     });
 
     authUnsubscribeRef.current = authUnsubscribe;
-
-    // Initial authentication check
-    const currentUser = auth.currentUser;
-    checkAuthentication(currentUser);
 
     return () => {
       isMountedRef.current = false;
@@ -113,11 +112,16 @@ export default function AdminVerificationPage() {
   }, []);
 
   // Separate function to set up Firestore listener
-  const setupFirestoreListener = () => {
+  const setupFirestoreListener = async () => {
     if (unsubscribeRef.current) {
       unsubscribeRef.current(); // Clean up existing listener
     }
 
+    console.log("Setting up Firestore listener...");
+    
+    // First test the connection
+    await testFirestoreConnection();
+    
     const q = query(
       collection(db, "agentVerifications"),
       where("status", "==", "pending")
@@ -126,15 +130,21 @@ export default function AdminVerificationPage() {
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-        if (!isMountedRef.current || !isAuthenticated) return;
+        if (!isMountedRef.current) return;
 
+        console.log("Received Firestore snapshot, size:", querySnapshot.size);
+        
         const pendingRequests: VerificationRequest[] = [];
         querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          console.log("Document data:", doc.id, data);
           pendingRequests.push({
             id: doc.id,
-            ...doc.data(),
+            ...data,
           } as VerificationRequest);
         });
+        
+        console.log("Setting requests:", pendingRequests.length, "items");
         setRequests(pendingRequests);
         setError(null);
       },
@@ -158,6 +168,38 @@ export default function AdminVerificationPage() {
     );
 
     unsubscribeRef.current = unsubscribe;
+  };
+
+  // Set up Firestore listener when authentication is confirmed
+  useEffect(() => {
+    if (isAuthenticated && adminUser) {
+      console.log("Authentication confirmed, setting up listener for user:", adminUser.email);
+      setupFirestoreListener();
+    }
+  }, [isAuthenticated, adminUser]);
+
+  // Test function to check if we can read from Firestore at all
+  const testFirestoreConnection = async () => {
+    try {
+      console.log("Testing Firestore connection...");
+      const testQuery = query(collection(db, "agentVerifications"));
+      const snapshot = await getDocs(testQuery);
+      console.log("Firestore test - Total documents:", snapshot.size);
+      
+      snapshot.forEach((doc) => {
+        console.log("Document:", doc.id, doc.data());
+      });
+      
+      const pendingQuery = query(
+        collection(db, "agentVerifications"),
+        where("status", "==", "pending")
+      );
+      const pendingSnapshot = await getDocs(pendingQuery);
+      console.log("Pending documents:", pendingSnapshot.size);
+      
+    } catch (error) {
+      console.error("Firestore test error:", error);
+    }
   };
 
   // Re-check authentication whenever the component becomes focused
@@ -438,9 +480,14 @@ export default function AdminVerificationPage() {
             {requests.length} pending requests
           </Text>
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Ionicons name="log-out-outline" size={24} color="#f44336" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity onPress={testFirestoreConnection} style={styles.testButton}>
+            <Ionicons name="refresh" size={20} color="#2196F3" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+            <Ionicons name="log-out-outline" size={24} color="#f44336" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -490,6 +537,10 @@ const styles = StyleSheet.create({
   },
   signOutButton: {
     padding: 8,
+  },
+  testButton: {
+    padding: 8,
+    marginRight: 8,
   },
   listContainer: {
     padding: 16,
