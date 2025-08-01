@@ -99,29 +99,29 @@ export default function SignUpPage() {
     }
   };
 
-  const handleGoogleSignUp = async () => {
-    try {
-      console.log("Google Sign Up");
-      // Firebase Google sign-up logic will go here
-    } catch (error: any) {
-      Alert.alert(
-        "Google Sign Up Error",
-        error.message || "An unknown error occurred"
-      );
-    }
-  };
+  // const handleGoogleSignUp = async () => {
+  //   try {
+  //     console.log("Google Sign Up");
+  //     // Firebase Google sign-up logic will go here
+  //   } catch (error: any) {
+  //     Alert.alert(
+  //       "Google Sign Up Error",
+  //       error.message || "An unknown error occurred"
+  //     );
+  //   }
+  // };
 
-  const handleAppleSignUp = async () => {
-    try {
-      console.log("Apple Sign Up");
-      // Firebase Apple sign-up logic will go here
-    } catch (error: any) {
-      Alert.alert(
-        "Apple Sign Up Error",
-        error.message || "An unknown error occurred"
-      );
-    }
-  };
+  // const handleAppleSignUp = async () => {
+  //   try {
+  //     console.log("Apple Sign Up");
+  //     // Firebase Apple sign-up logic will go here
+  //   } catch (error: any) {
+  //     Alert.alert(
+  //       "Apple Sign Up Error",
+  //       error.message || "An unknown error occurred"
+  //     );
+  //   }
+  // };
 
   const handleLogin = () => {
     console.log("Navigate to Login");
@@ -314,7 +314,7 @@ export default function SignUpPage() {
           </TouchableOpacity>
 
           {/* Social Login Buttons */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.socialButton}
             onPress={handleGoogleSignUp}
           >
@@ -338,7 +338,7 @@ export default function SignUpPage() {
               style={styles.socialIconApple}
             />
             <Text style={styles.socialButtonText}>Sign in with Apple</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* Login Link */}
           <View style={styles.loginContainer}>

@@ -116,29 +116,29 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      console.log("Google Sign In");
-      Alert.alert("Coming Soon", "Google Sign In will be available soon");
-    } catch (error: any) {
-      Alert.alert(
-        "Google Sign In Error",
-        error.message || "An unknown error occurred"
-      );
-    }
-  };
+  // const handleGoogleSignIn = async () => {
+  //   try {
+  //     console.log("Google Sign In");
+  //     Alert.alert("Coming Soon", "Google Sign In will be available soon");
+  //   } catch (error: any) {
+  //     Alert.alert(
+  //       "Google Sign In Error",
+  //       error.message || "An unknown error occurred"
+  //     );
+  //   }
+  // };
 
-  const handleAppleSignIn = async () => {
-    try {
-      console.log("Apple Sign In");
-      Alert.alert("Coming Soon", "Apple Sign In will be available soon");
-    } catch (error: any) {
-      Alert.alert(
-        "Apple Sign In Error",
-        error.message || "An unknown error occurred"
-      );
-    }
-  };
+  // const handleAppleSignIn = async () => {
+  //   try {
+  //     console.log("Apple Sign In");
+  //     Alert.alert("Coming Soon", "Apple Sign In will be available soon");
+  //   } catch (error: any) {
+  //     Alert.alert(
+  //       "Apple Sign In Error",
+  //       error.message || "An unknown error occurred"
+  //     );
+  //   }
+  // };
 
   const handleForgotPassword = () => {
     Alert.alert(
@@ -252,7 +252,7 @@ export default function LoginPage() {
           </View>
 
           {/* Social Login Buttons */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.socialButton}
             onPress={handleGoogleSignIn}
           >
@@ -263,9 +263,9 @@ export default function LoginPage() {
               style={styles.socialIcon}
             />
             <Text style={styles.socialButtonText}>Sign In with Google</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={styles.socialButton}
             onPress={handleAppleSignIn}
           >
@@ -276,7 +276,7 @@ export default function LoginPage() {
               style={styles.socialIconApple}
             />
             <Text style={styles.socialButtonText}>Sign In with Apple</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* Register Link */}
           <View style={styles.registerContainer}>

@@ -4,13 +4,12 @@ import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "",
+  apiKey: "AIzaSyDeFct37pfg7lpWtbgRA3yhvZfiIvlHHro",
   authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: "paymxnts-cc793",
-  storageBucket: "paymxnts-cc793.firebasestorage.app",
-  messagingSenderId: "869881641017",
-  appId: "1:869881641017:web:1a9d54c8387fab9cad35e8",
-  measurementId: "G-LDWTEVHPLX",
+  projectId: "paymxnts-17b10",
+  storageBucket: "paymxnts-17b10.firebasestorage.app",
+  messagingSenderId: "389385329696",
+  appId: "1:389385329696:web:9d20f95b4b0eb24eb0b045",
 };
 
 // Initialize Firebase

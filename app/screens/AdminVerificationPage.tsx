@@ -58,7 +58,7 @@ export default function AdminVerificationPage() {
       return false;
     }
 
-    const adminEmails = ["adith3939@gmail.com", "admin@example.com"];
+    const adminEmails = ["adith3939@gmail.com", "admin@gmail.com"];
     if (!adminEmails.includes(user.email?.toLowerCase() || "")) {
       setIsAuthenticated(false);
       Alert.alert("Access Denied", "You don't have admin privileges");
