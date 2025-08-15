@@ -4,18 +4,18 @@ import { useRouter } from "expo-router";
 import { addDoc, collection } from "firebase/firestore";
 import React, { useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -129,7 +129,10 @@ export default function SignUpPage() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "right", "left", "bottom"]}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}

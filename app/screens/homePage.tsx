@@ -3,12 +3,11 @@ import React from "react";
 import {
   Dimensions,
   Image,
-  Platform,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -27,11 +26,12 @@ export default function HomePage() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "right", "left", "bottom"]}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* Top Spacing - Reduced for iOS since SafeAreaView handles top spacing */}
-      <View style={styles.topSpacing} />
 
       {/* Top Image Container */}
       <View style={styles.topImageContainer}>
@@ -74,9 +74,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingHorizontal: 20,
     paddingBottom: 30,
-  },
-  topSpacing: {
-    height: Platform.OS === "ios" ? 5 : 15, // Less spacing needed on iOS with SafeAreaView
   },
   topImageContainer: {
     height: height * 0.32, // 32% of screen height

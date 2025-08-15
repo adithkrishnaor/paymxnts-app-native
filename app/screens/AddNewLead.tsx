@@ -3,26 +3,26 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import {
-  addDoc,
-  collection,
-  getDocs,
-  query,
-  serverTimestamp,
-  where,
+    addDoc,
+    collection,
+    getDocs,
+    query,
+    serverTimestamp,
+    where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../config/FirebaseConfig";
@@ -279,7 +279,7 @@ export default function AddNewLead() {
     return (
       <SafeAreaView
         style={styles.container}
-        edges={["right", "left", "bottom"]}
+        edges={["top", "right", "left", "bottom"]}
       >
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.centerContainer}>
@@ -290,7 +290,10 @@ export default function AddNewLead() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "right", "left", "bottom"]}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}

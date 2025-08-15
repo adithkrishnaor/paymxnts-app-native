@@ -15,13 +15,12 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Platform,
   RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth, db } from "../../config/FirebaseConfig";
@@ -470,7 +469,10 @@ export default function AdminVerificationPage() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["right", "left", "bottom"]}>
+    <SafeAreaView
+      style={styles.container}
+      edges={["top", "right", "left", "bottom"]}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       <View style={styles.header}>
@@ -522,8 +524,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    // Add padding for iOS status bar if needed
-    paddingTop: Platform.OS === "ios" ? 10 : 40,
+  // SafeArea handles top inset; no manual status padding
   },
   headerTitle: {
     fontSize: 24,
