@@ -1,0 +1,31 @@
+{
+  "cli": {
+    "version": ">= 16.17.4",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "FIREBASE_API_KEY": "AIzaSyDeFct37pfg7lpWtbgRA3yhvZfiIvlHHro",
+        "FIREBASE_AUTH_DOMAIN": "paymxnts-17b10.firebaseapp.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "developmentClient": false,
+      "distribution": "store",
+      "env": {
+        "FIREBASE_API_KEY": "AIzaSyDeFct37pfg7lpWtbgRA3yhvZfiIvlHHro",
+        "FIREBASE_AUTH_DOMAIN": "paymxnts-17b10.firebaseapp.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
