@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -47,6 +55,76 @@ export default function ViewLeads() {
   const handleLogout = async () => {
     await AsyncStorage.removeItem("agentEmail");
     router.replace("/screens/homePage");
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to delete your account? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Final Confirmation",
+              "This will permanently delete your account and all associated data.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Confirm Deletion",
+                  style: "destructive",
+                  onPress: performAccountDeletion,
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const performAccountDeletion = async () => {
+    try {
+      setLoading(true);
+
+      if (!agentId) {
+        Alert.alert("Error", "Unable to identify account for deletion");
+        return;
+      }
+
+      // Delete all leads created by this agent
+      const leadsToDelete = leads.filter((lead) => lead.id);
+      for (const lead of leadsToDelete) {
+        await deleteDoc(doc(db, "leads", lead.id));
+      }
+
+      // Delete the agent profile
+      await deleteDoc(doc(db, "agents", agentId));
+
+      // Clear local storage
+      await AsyncStorage.removeItem("agentEmail");
+
+      Alert.alert(
+        "Account Deleted",
+        "Your account and all associated data have been permanently deleted.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/screens/homePage"),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      Alert.alert(
+        "Deletion Failed",
+        "There was an error deleting your account. Please try again or contact support."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -262,8 +340,21 @@ export default function ViewLeads() {
             <Ionicons name="add-outline" size={20} color="#666" />
             <Text style={styles.addNewText}>Add Lead</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.profileIcon} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#666" />
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => {
+              Alert.alert("Account Settings", "Choose an option:", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Logout", onPress: handleLogout },
+                {
+                  text: "Delete Account",
+                  style: "destructive",
+                  onPress: handleDeleteAccount,
+                },
+              ]);
+            }}
+          >
+            <Ionicons name="settings-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
       </View>
@@ -379,6 +470,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   profileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  settingsButton: {
     width: 40,
     height: 40,
     borderRadius: 20,

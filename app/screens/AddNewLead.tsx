@@ -3,26 +3,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import {
-    addDoc,
-    collection,
-    getDocs,
-    query,
-    serverTimestamp,
-    where,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  serverTimestamp,
+  where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../../config/FirebaseConfig";
@@ -100,6 +102,96 @@ export default function AddNewLead() {
     setPointsOfSale("");
     setBusinessLocations("");
     setOtherNotes("");
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      Alert.alert(
+        "Delete Account",
+        "Are you sure you want to permanently delete your account? This action cannot be undone and will remove all your data including leads, profile information, and account history.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Delete Account",
+            style: "destructive",
+            onPress: () => {
+              // Second confirmation to prevent accidental deletion
+              Alert.alert(
+                "Final Confirmation",
+                "This will permanently delete your account and all associated data. Are you absolutely sure?",
+                [
+                  {
+                    text: "Cancel",
+                    style: "cancel",
+                  },
+                  {
+                    text: "Yes, Delete Forever",
+                    style: "destructive",
+                    onPress: performAccountDeletion,
+                  },
+                ]
+              );
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Delete account confirmation error:", error);
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    }
+  };
+
+  const performAccountDeletion = async () => {
+    setLoading(true);
+    try {
+      if (!agentId || !agentEmail) {
+        Alert.alert(
+          "Error",
+          "Unable to identify account for deletion. Please log in again."
+        );
+        return;
+      }
+
+      // Delete agent's leads
+      const leadsQuery = query(
+        collection(db, "leads"),
+        where("agentId", "==", agentId)
+      );
+      const leadsSnapshot = await getDocs(leadsQuery);
+      const deletionPromises = leadsSnapshot.docs.map((doc) =>
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deletionPromises);
+
+      // Delete agent profile
+      await deleteDoc(doc(db, "agents", agentId));
+
+      // Clear local storage
+      await AsyncStorage.removeItem("agentEmail");
+
+      Alert.alert(
+        "Account Deleted",
+        "Your account and all associated data have been permanently deleted.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/screens/homePage"),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error("Account deletion error:", error);
+      Alert.alert(
+        "Deletion Error",
+        error.message ||
+          "Failed to delete account. Please contact support if this issue persists."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -318,10 +410,20 @@ export default function AddNewLead() {
                 <Text style={styles.viewLeadsText}>View Leads</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.profileIcon}
-                onPress={handleLogout}
+                style={styles.settingsButton}
+                onPress={() => {
+                  Alert.alert("Account Settings", "Choose an option:", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Logout", onPress: handleLogout },
+                    {
+                      text: "Delete Account",
+                      style: "destructive",
+                      onPress: handleDeleteAccount,
+                    },
+                  ]);
+                }}
               >
-                <Ionicons name="log-out-outline" size={24} color="#666" />
+                <Ionicons name="settings-outline" size={24} color="#666" />
               </TouchableOpacity>
             </View>
           </View>
@@ -619,6 +721,22 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   profileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  settingsButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
